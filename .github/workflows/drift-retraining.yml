@@ -1,0 +1,76 @@
+
+name: MLOps Data Drift and Model Retraining
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Select data mode"
+        required: true
+        type: choice
+        options:
+          - stable
+          - drift
+
+jobs:
+  drift-detection:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Generate Student Dataset
+        run: |
+          python generate_data.py
+
+      - name: Prepare Reference Dataset
+        run: |
+          python prepare_reference.py
+
+      - name: Generate Recent Data
+        run: |
+          python simulate_current_data.py --mode ${{ inputs.mode }}
+
+      - name: Detect Data Drift
+        run: |
+          python detect_drift.py
+
+      - name: Retrain Candidate Model
+        run: |
+          python retrain_candidate.py
+
+      - name: Apply Model Quality Gate
+        run: |
+          python approve_candidate.py
+
+      - name: Verify Approved Model
+        run: |
+          python -c "import joblib; m=joblib.load('student_result_model.pkl'); print('Model loaded successfully:', type(m).__name__)"
+
+      - name: Display Generated Files
+        if: always()
+        run: |
+          echo "Generated MLOps artifacts:"
+          find drift -maxdepth 1 -type f -print
+          ls -lh student_result_model.pkl
+
+      - name: Upload MLOps Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlops-practical-15-results
+          path: |
+            student_results.csv
+            student_result_model.pkl
+            drift/
+          if-no-files-found: warn
